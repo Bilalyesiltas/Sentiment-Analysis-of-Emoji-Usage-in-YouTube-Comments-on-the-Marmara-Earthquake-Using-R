@@ -1,0 +1,297 @@
+---
+title: "Marmara Depremi İçin En Çok Kullanılan Emojiler"
+output: html_notebook
+---
+
+## Emoji analizi için gerekli olan paketleri indirmek için kullandığım kodlar şunlardır:
+```{r}
+install.packages("googlesheets4")
+install.packages("httr")
+install.packages("readxl")
+install.packages("googleAuthR")
+install.packages("tuber")
+install.packages("stringi")
+install.packages("stringr")
+install.packages("dplyr")
+install.packages("showtext")
+install.packages("ggplot2")
+install.packages("wordcloud2")
+install.packages("tidytext")
+
+
+```
+
+
+
+## Emoji analizi için gerekli olan paketleri etkinleştirmek için kullandığım kodlar şunlardır:
+```{r}
+library(googlesheets4) #  Google Sheets ile R arasında veri alışverişi yapmanızı sağlar.
+library(httr) # HTTP istekleri yapmak ve yanıtları işlemek için kullanılır.
+library(readxl) # Excel dosyalarını R ortamına aktarmanızı sağlar.
+library(googleAuthR) # Google API'leriyle etkileşime geçmek için kimlik doğrulaması yapmanızı sağlar.
+library(tuber) # YouTube API'leriyle etkileşime geçmek için kullanılır.
+library(stringi) # Dizeler üzerinde işlem yapmak için geniş bir fonksiyon koleksiyonu sağlar.
+library(stringr) # Dizeler üzerinde daha kullanıcı dostu işlemler yapmanızı sağlar.
+library(dplyr) # Veri manipülasyonu ve filtreleme için kullanılır.
+library(showtext) # Grafiklerde farklı yazı tiplerini kullanmanızı sağlar.
+library(ggplot2) # Verileri görselleştirmek için kullanılır.
+library(wordcloud2) # Kelime bulutları oluşturmanıza olanak sağlar.
+library(tidytext) # Metin madenciliği ve duygu analizi gibi işlemleri gerçekleştirmek için kullanılır. 
+```
+
+
+
+## Bu kod bloğu, belirli bir YouTube videosuna ait yorumları çekerek Excel dosyasına kaydeden bir işlem akışını temsil eder. 
+Bu işlem, YouTube videoları hakkındaki yorumları analiz etmek veya saklamak için kullanılabilir.
+```{r}
+client_id <- "**********************************************************************"
+client_secret <-"************************************************"
+yt_oauth(client_id, client_secret, token = '')
+get_all_comments(video_id = "*************************")
+comment <- get_all_comments (video_id = "*************************")
+write_xlsx (comment, "C:\\Youtube\\marmaradepremi.xlsx")
+```
+
+
+
+# EMOJİ ANALİZİ #
+
+
+
+## Veri çekme işlemi tamamlandıktan sonra, excele aktardığımız verileri okuyalım.
+```{r}
+deprem <- read_excel(file.choose(), sheet = 1) 
+```
+
+
+
+## Metinde yer alan emojileri metinden çıkaralım. 
+```{r}
+emojiler <- stri_extract_all_regex(deprem$metin, "\\p{So}|\\p{Sk}")
+```
+
+
+
+## Çıkartmış olduğumuz emojilerden 'NA' değerlerini temizleyerek bir emoji listesi oluşturalım.
+```{r}
+temizlenmis_emojiler <- emojiler[!is.na(emojiler)]
+```
+
+
+
+## Kaç farklı emojinin kullanıldığını belirleyelim.
+```{r}
+kac_farkli_emoji_kullanilmis <- length(unique(temizlenmis_emojiler))
+print(kac_farkli_emoji_kullanilmis)
+```
+
+
+## Aşağıdaki fonksiyon, showtext paketinin işlevselliğinin otomatik kullanımını açıp kapatabilir. 
+```{r}
+showtext_auto()
+```
+
+
+## Temizlenmiş tüm emojileri unlist() fonksiyonu ile düz bir vektöre dönüştürelim.
+Yani, bir liste içindeki tüm alt elemanları tek bir vektör haline getirelim.
+```{r}
+tum_emojiler <- unlist(temizlenmis_emojiler)
+```
+
+
+## Bir emoji'nin frekansını (kaç kez geçtiğini) hesaplayalım. 
+table() fonksiyonu ile bu frekansları bir tablo (vektör) olarak saklayalım.
+```{r}
+emoji_freq <- table(tum_emojiler)
+```
+
+
+##Saklanan tabloyu iki sütunlu bir veri çerçevesine dönüştürelim.
+```{r}
+emoji_freq_df <- data.frame(emoji = names(emoji_freq), frequency = as.numeric(emoji_freq))
+```
+
+
+## str() fonksiyonu ile veri çerçevesinin özetini çıkaralım.
+```{r}
+str(emoji_freq_df)
+```
+
+
+
+## GEÇERLİ EMOJİLERİ FİLTRELEME 
+
+```{r}
+is_valid_emoji <- function(emoji) {
+  emoji_codepoints <- stri_enc_toutf32(emoji)
+  if (length(emoji_codepoints) == 0) return(FALSE)
+
+  emoji_ranges <- list(
+    c(0x1F600, 0x1F64F), # Emoticons
+    c(0x1F300, 0x1F5FF), # Miscellaneous Symbols and Pictographs
+    c(0x1F680, 0x1F6FF), # Transport and Map Symbols
+    c(0x1F700, 0x1F77F), # Alchemical Symbols
+    c(0x1F780, 0x1F7FF), # Geometric Shapes Extended
+    c(0x1F800, 0x1F8FF), # Supplemental Arrows-C
+    c(0x1F900, 0x1F9FF), # Supplemental Symbols and Pictographs
+    c(0x1FA00, 0x1FA6F), # Chess Symbols
+    c(0x1FA70, 0x1FAFF)  # Symbols and Pictographs Extended-A
+  )
+  
+  any(sapply(emoji_ranges, function(range) {
+    any(emoji_codepoints >= range[1] & emoji_codepoints <= range[2])
+  }))
+}
+```
+
+
+
+```{r}
+temizlenmis_emojiler <- temizlenmis_emojiler[sapply(temizlenmis_emojiler, is_valid_emoji)] 
+```
+
+
+# ÇUBUK GRAFİĞİ # 
+
+
+## Veri çerçevesindeki emojilerin frekanslarına göre sıralanmış ilk 40 emojiyi içeren bir altküme oluşturalım. 
+```{r}
+top_40_emojiler <- emoji_freq_df %>%
+  arrange(desc(frequency)) %>%
+  head(40)
+```
+
+
+Emojilerin etiketlerini ve frekanslarını ayrı ayrı alarak hesaplayalım. Bunun için iki farklı vektör oluşturalım. 
+```{r}
+emoji_labels <- top_40_emojiler$emoji
+emoji_counts <- top_40_emojiler$frequency
+```
+
+
+## 40 emojiyi içeren bu altkümeyi emoji sütununu seçerek yeni bir vektör oluşturalım.
+```{r}
+top_40_emojiler_unicode <- top_40_emojiler$emoji
+```
+
+
+
+
+## Emojilerin evrensel kodlarını işleyelim.
+```{r}
+unicode_liste <- stri_extract_all_regex(top_40_emojiler_unicode, "[\\p{So}\\p{Sk}]+")
+```
+
+
+
+
+##  Veri çerçevesindeki "emoji" sütununu döndürerek en yüksek frekansa sahip ilk 40 emojinin Unicode karakterlerini içeren bir vektör oluşturalım.
+```{r}
+top_40_emojiler$emoji
+```
+
+
+
+
+## ÇUBUK GRAFİK
+
+
+## Bu kod bloğu, top_40_emojiler veri çerçevesindeki en sık kullanılan 40 emoji için bir bar grafiği oluşturur. Her bir bar, bir emojinin kullanım sıklığını gösterir ve grafikte çeşitli stil ve tema ayarları uygulanmıştır. Bu grafik, emoji kullanımını görselleştirmek için kullanılır.
+```{r}
+# Grafik oluşturma
+ggplot(data = top_40_emojiler, aes(x = factor(emoji, levels = emoji), y = frequency, fill = emoji)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = frequency), vjust = -0.5, color = "black", size = 3, angle = 0, position = position_dodge(width = 1)) +  # Metinleri yatay olarak bırak
+  labs(title = "En Fazla Kullanılan 40 Emoji", x = "Emoji", y = "Kullanım Sıklığı") +
+  scale_x_discrete(labels = top_40_emojiler$emoji) +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "grey"),
+        axis.text.x = element_text(size = 20, hjust = 0.5, color = "brown"),  # Hizalama düzeltildi
+        axis.text.y = element_text(size = 15, color = "brown"),
+        plot.title = element_text(color = "darkblue", size = 25),
+        axis.title.x = element_text(color = "darkblue", size = 20),
+        axis.title.y = element_text(color = "darkblue", size = 20)) +
+  coord_cartesian(ylim = c(0, max(top_40_emojiler$frequency) * 1.1)) +
+  scale_fill_viridis_d()  # Renkli sütunlar
+
+```
+
+
+
+
+# EMOJİ BULUTU #
+
+## Emoji bulutu oluşturalım. 
+```{r}
+emoji_data <- data.frame(word = emoji_labels, freq = emoji_counts)
+wordcloud2(data = emoji_data, size = 3, color = "random-dark", backgroundColor = "white",shape = "circle", fontWeight = "bold", minSize = 5)
+```
+
+
+
+## DUYGU ANALİZİ
+
+
+# tidytext paketini kullanarak Bing Liu'nun duygu analizine yönelik sözlüğünü getirir.
+```{r}
+duygu_sozlugu <- get_sentiments("bing")
+```
+
+
+#Bu kod bloğu, deprem adlı bir veri çerçevesindeki emojilerin duygu analizini gerçekleştirir.
+```{r}
+metin_duygu <- deprem %>%
+  unnest_tokens(word, metin) %>%
+  inner_join(duygu_sozlugu, by = "word")
+```
+
+
+
+#Bu kod bloğu, metin_duygu adlı veri çerçevesinde yer alan duygu (sentiment) sütunundaki
+farklı duygu türlerinin (örneğin, pozitif, negatif) kaç kez geçtiğini sayar ve her bir duygu
+türünün frekansını içeren bir tablo oluşturur.
+```{r}
+duygu_sayilari <- metin_duygu %>%
+  count(sentiment)
+print(duygu_sayilari)
+```
+
+
+
+#Bu kod bloğu, duygu_sayilari tablosundaki her bir duygu türünün yüzdesini hesaplar ve bu bilgiyi tabloya ekler.
+```{r}
+toplam_duygu_sayisi <- sum(duygu_sayilari$n)
+duygu_sayilari <- duygu_sayilari %>%
+  mutate(yuzde = (n / toplam_duygu_sayisi) * 100)
+print(duygu_sayilari)
+```
+
+
+
+#Bu kod bloğu, duygu_sayilari verisini kullanarak duygu puanlarının dağılımını görselleştiren bir çubuk grafik oluşturur.
+```{r}
+ggplot(duygu_sayilari, aes(x = sentiment, y = n)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_text(aes(label = n), vjust = -0.5, color = "black", size = 3) + # Sutunlarin icine frekanslari ekler
+  labs(title = "Duyarlılık Puan Dağılımı", x = "Duygu Puanı", y = "Frekans") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+
+#Bu kod bloğu, duygu_sayilari verisini kullanarak her bir duygu türünün yüzdesini gösteren bir çubuk grafik oluşturur.
+```{r}
+ggplot(data = duygu_sayilari, aes(x = sentiment, y = yuzde, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(round(yuzde), "%")), vjust = -0.5, color = "black", size = 3) + # Sutunlarin icine yuzdeleri ekler
+  labs(title = "", x = "Duygu", y = "Yuzde (%)") +
+  theme_minimal() +
+  theme(plot.title = element_text(color = "darkblue", size = 25),
+        axis.title.x = element_text(color = "darkblue", size = 20),
+        axis.title.y = element_text(color = "darkblue", size = 20),
+        legend.position = "none")
+
+```
+
